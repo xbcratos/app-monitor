@@ -2,13 +2,19 @@ package com.xba.app.monitoring;
 
 import com.xba.app.utils.MemoryUtils;
 
+import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
 import java.lang.management.OperatingSystemMXBean;
 import java.lang.management.RuntimeMXBean;
 import java.lang.management.ThreadInfo;
 import java.lang.management.ThreadMXBean;
+import java.nio.file.FileStore;
+import java.nio.file.FileSystems;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.sql.Date;
+import java.text.NumberFormat;
 import java.time.Instant;
 
 public class AppMonitor {
@@ -17,11 +23,13 @@ public class AppMonitor {
   private Runtime runtime;
   private MemoryMXBean memoryMxBean;
   private OperatingSystemMXBean operatingSystemMxBean;
+  private com.sun.management.OperatingSystemMXBean operatingSystemSunMxBean;
   private ThreadMXBean threadMxBean;
 
   public AppMonitor() {
     memoryMxBean = ManagementFactory.getMemoryMXBean();
     operatingSystemMxBean = ManagementFactory.getOperatingSystemMXBean();
+    operatingSystemSunMxBean = ManagementFactory.getPlatformMXBean(com.sun.management.OperatingSystemMXBean.class);
     threadMxBean = ManagementFactory.getThreadMXBean();
     runtimeMxBean = ManagementFactory.getRuntimeMXBean();
     runtime = Runtime.getRuntime();
@@ -46,6 +54,13 @@ public class AppMonitor {
 
   // operating system functions
 
+  public String getProcessCpuLoad() {
+    return String.valueOf(operatingSystemSunMxBean.getProcessCpuLoad());
+  }
+
+  public String getSystemCpuLoad() {
+    return String.valueOf(operatingSystemSunMxBean.getSystemCpuLoad());
+  }
   public String getSystemName() {
     return operatingSystemMxBean.getName();
   }
@@ -60,6 +75,26 @@ public class AppMonitor {
 
   public String getSystemLoad() {
     return String.valueOf(operatingSystemMxBean.getSystemLoadAverage());
+  }
+
+  public String getStorageMetrics() {
+    StringBuilder storageMetrics = new StringBuilder();
+    NumberFormat nf = NumberFormat.getNumberInstance();
+    for (Path root : FileSystems.getDefault().getRootDirectories()) {
+      StringBuilder specificPathStorageMetrics = new StringBuilder();
+      specificPathStorageMetrics.append(root + ": ");
+      try {
+        FileStore store = Files.getFileStore(root);
+        specificPathStorageMetrics.append("available=" + MemoryUtils.convertToStringRepresentation(store.getUsableSpace())
+            + ", total=" + MemoryUtils.convertToStringRepresentation(store.getTotalSpace()));
+      } catch (IOException e) {
+        specificPathStorageMetrics.append("error querying space: " + e.toString());
+      } finally {
+        specificPathStorageMetrics.append(System.lineSeparator());
+        storageMetrics.append(specificPathStorageMetrics);
+      }
+    }
+    return storageMetrics.toString();
   }
 
   // runtime functions
@@ -146,6 +181,10 @@ public class AppMonitor {
   public String toString() {
     StringBuilder jvmMonitorStr = new StringBuilder();
     addToStrBuilderWithLineSeparator(jvmMonitorStr, "#################### App Info ####################");
+    addToStrBuilderWithLineSeparator(jvmMonitorStr, "############## CPU ###################");
+    addToStrBuilderWithLineSeparator(jvmMonitorStr, String.format("Process CPU load: %s", getProcessCpuLoad()));
+    addToStrBuilderWithLineSeparator(jvmMonitorStr, String.format("System CPU load: %s", getSystemCpuLoad()));
+    addToStrBuilderWithLineSeparator(jvmMonitorStr, "#####################################");
     addToStrBuilderWithLineSeparator(jvmMonitorStr, "############## Memory ################");
     addToStrBuilderWithLineSeparator(jvmMonitorStr, String.format("Heap init: %s", getHeapInit()));
     addToStrBuilderWithLineSeparator(jvmMonitorStr, String.format("Heap used: %s", getHeapUsed()));
@@ -160,6 +199,7 @@ public class AppMonitor {
     addToStrBuilderWithLineSeparator(jvmMonitorStr, String.format("System version: %s", getSystemVersion()));
     addToStrBuilderWithLineSeparator(jvmMonitorStr, String.format("System load in the last minute: %s", getSystemLoad()));
     addToStrBuilderWithLineSeparator(jvmMonitorStr, String.format("System available processors: %s", getSystemAvailableProcessors()));
+    addToStrBuilderWithLineSeparator(jvmMonitorStr, String.format("Storage Metrics: %s", getStorageMetrics()));
     addToStrBuilderWithLineSeparator(jvmMonitorStr, "#####################################");
     addToStrBuilderWithLineSeparator(jvmMonitorStr, "############## Runtime ##############");
     addToStrBuilderWithLineSeparator(jvmMonitorStr, String.format("Java version: %s", getJavaVersion()));
